@@ -3,6 +3,7 @@ import os
 
 import constants
 from data.TVSum.load_annotations import load_annotations
+from text_processing import normalize_segments
 from whisper_asr import transcribe_video
 
 
@@ -25,7 +26,9 @@ def collect_training_samples(dataset: str, root: str, whisper_model: str, langua
             print(f"[warn] Missing video file for {video_id}, skipping")
             continue
 
-        segments = transcribe_video(path_to_video, model_size=whisper_model, language=language)
+        segments = transcribe_video(path_to_video, whisper_model, language)
+        segments = normalize_segments(segments, language)
+
 
 def main():
     ap = argparse.ArgumentParser(description="Train supervised sentence ranker on TVSum/SumMe (Ridge only)")
