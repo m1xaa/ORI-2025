@@ -3,6 +3,7 @@ import os
 
 import constants
 from data.TVSum.load_annotations import load_annotations
+from featurization import align_segments_with_user_scores
 from text_processing import normalize_segments
 from whisper_asr import transcribe_video
 
@@ -29,12 +30,22 @@ def collect_training_samples(dataset: str, root: str, whisper_model: str, langua
         segments = transcribe_video(path_to_video, whisper_model, language)
         segments = normalize_segments(segments, language)
 
+        labels = align_segments_with_user_scores(segments, annotations['user_scores'], annotations['fps'])
+
+        if not segments or len(segments) == 0 or all(s['text'].strip() == "" for s in segments):
+            continue
+
+
+
+
+
 
 def main():
     ap = argparse.ArgumentParser(description="Train supervised sentence ranker on TVSum/SumMe (Ridge only)")
     ap.add_argument("--dataset", required=True, choices=["tvsum", "summe"])
     ap.add_argument("--root", required=True, help="Dataset root directory")
     ap.add_argument("--whisper_model", default="small")
+    ap.add_argument("--embedding_model", default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
     ap.add_argument("--language", default="en")
     ap.add_argument("--model_out", required=True)
     ap.add_argument("--top_k", type=int, default=5, help="Number of sentences in summary")
