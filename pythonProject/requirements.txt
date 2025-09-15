@@ -5,3 +5,6 @@ openai-whisper
 networkx
 sentence-transformers
 transformers
+bert-score
+rouge-score
+joblib

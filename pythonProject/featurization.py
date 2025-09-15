@@ -13,8 +13,8 @@ def align_segments_with_user_scores(
     fps: float
 ):
     average_frame_importance = user_scores.mean(axis=1)
-    min, max = average_frame_importance.min(), average_frame_importance.max()
-    normalized_frame_importance = (average_frame_importance - min) / (max - min + 1e-8)
+    min_importance, max_importance = average_frame_importance.min(), average_frame_importance.max()
+    normalized_frame_importance = (average_frame_importance - min_importance) / (max_importance - min_importance + 1e-8)
 
     labels = []
     number_of_frames = len(normalized_frame_importance)
@@ -48,7 +48,7 @@ def compute_textrank_scores(texts: List[str]) -> np.ndarray:
 
 def embed_sentences(texts: List[str], model_name: str):
     model = SentenceTransformer(model_name)
-    embs = model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
+    embs = model.encode(texts, normalize_embeddings=True)
     return np.asarray(embs)
 
 def make_feature_matrix(segments: List[Dict[str, Any]], embedding_model_name: str):
