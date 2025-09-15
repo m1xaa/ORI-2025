@@ -1,21 +1,27 @@
 import argparse
 import os
-
+import numpy as np
 import constants
 from data.TVSum.load_annotations import load_annotations
-from featurization import align_segments_with_user_scores
+from featurization import align_segments_with_user_scores, make_feature_matrix
 from text_processing import normalize_segments
+from utils import train_test_val_split
 from whisper_asr import transcribe_video
 
 
-def collect_training_samples(dataset: str, root: str, whisper_model: str, language: str):
+def collect_training_samples(
+        dataset: str,
+        root: str,
+        whisper_model: str,
+        language: str,
+        embedding_model_name: str
+):
     if dataset == "tvsum":
         annotations = load_annotations(root)
     else:
         raise NotImplementedError("SumME not implemented yet")
     videos_dir = os.path.join(root, constants.VIDEOS_DIR)
 
-    x, y, sentences = [], [], []
     for video_id, metadata in annotations.items():
         path_to_video = None
         for ext in constants.VIDEO_EXTENSIONS:
@@ -29,11 +35,14 @@ def collect_training_samples(dataset: str, root: str, whisper_model: str, langua
 
         segments = transcribe_video(path_to_video, whisper_model, language)
         segments = normalize_segments(segments, language)
-
-        labels = align_segments_with_user_scores(segments, annotations['user_scores'], annotations['fps'])
-
         if not segments or len(segments) == 0 or all(s['text'].strip() == "" for s in segments):
             continue
+
+        labels = align_segments_with_user_scores(segments, annotations['user_scores'], annotations['fps'])
+        features = make_feature_matrix(segments, embedding_model_name)
+
+        return np.vstack(features), np.concatenate(labels), [s['text'] for s in segments]
+
 
 
 
@@ -51,7 +60,10 @@ def main():
     ap.add_argument("--top_k", type=int, default=5, help="Number of sentences in summary")
     args = ap.parse_args()
 
-    collect_training_samples(args.dataset, args.root, args.whisper_model, args.language)
+    x, y, sentences = collect_training_samples(args.dataset, args.root, args.whisper_model, args.language, args.embedding_model)
+    x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test = train_test_val_split(x, y, sentences)
+
+
 
 
 

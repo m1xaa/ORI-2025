@@ -2,3 +2,6 @@ h5py
 pandas
 numpy
 openai-whisper
+networkx
+sentence-transformers
+transformers
