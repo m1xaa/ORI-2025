@@ -8,3 +8,4 @@ transformers
 bert-score
 rouge-score
 joblib
+tqdm

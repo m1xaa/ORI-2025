@@ -8,9 +8,9 @@ from utils import normalize
 
 
 def align_segments_with_user_scores(
-    segments: List[Dict[str, Any]],
-    user_scores: np.ndarray,
-    fps: float
+        segments: List[Dict[str, Any]],
+        user_scores: np.ndarray,
+        fps: float
 ):
     average_frame_importance = user_scores.mean(axis=1)
     min_importance, max_importance = average_frame_importance.min(), average_frame_importance.max()
@@ -22,7 +22,7 @@ def align_segments_with_user_scores(
         start = segment['start']
         end = segment['end']
         start_idx = max(0, round(start * fps))
-        end_idx = min(round(end * fps), number_of_frames-1)
+        end_idx = min(round(end * fps), number_of_frames - 1)
         segment_window = normalized_frame_importance[start_idx:end_idx]
         if segment_window.size <= 0:
             labels.append(0.0)
@@ -30,6 +30,7 @@ def align_segments_with_user_scores(
             labels.append(segment_window.mean())
 
     return np.array(labels, dtype=float)
+
 
 def compute_tfidf_scores(texts: List[str]) -> np.ndarray:
     model = TfidfVectorizer(min_df=1, ngram_range=(1, 2))
@@ -46,10 +47,12 @@ def compute_textrank_scores(texts: List[str]) -> np.ndarray:
     scores = nx.pagerank(graph, max_iter=200)
     return np.array([scores[i] for i in range(len(texts))])
 
+
 def embed_sentences(texts: List[str], model_name: str):
     model = SentenceTransformer(model_name)
     embs = model.encode(texts, normalize_embeddings=True)
     return np.asarray(embs)
+
 
 def make_feature_matrix(segments: List[Dict[str, Any]], embedding_model_name: str):
     texts = [s['text'] for s in segments]
@@ -67,7 +70,3 @@ def make_feature_matrix(segments: List[Dict[str, Any]], embedding_model_name: st
     ])
 
     return features
-
-
-
-

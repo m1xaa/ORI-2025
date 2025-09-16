@@ -2,6 +2,8 @@ import argparse
 import os
 import joblib
 import numpy as np
+from tqdm import tqdm
+
 import constants
 from data.TVSum.load_annotations import load_annotations
 from evaluation import compute_bertscore
@@ -26,7 +28,7 @@ def collect_training_samples(
     videos_dir = os.path.join(root, constants.VIDEOS_DIR)
 
     all_features, all_labels, all_sentences = [], [], []
-    for video_id, metadata in annotations.items():
+    for video_id, metadata in tqdm(annotations.items(), desc=f"Preparing {dataset} sentences"):
         path_to_video = None
         for ext in constants.VIDEO_EXTENSIONS:
             path = os.path.join(videos_dir, video_id + ext)
@@ -63,8 +65,8 @@ def select_summary(sentences, scores, top_k):
     return [sentences[i] for i in idx]
 
 
-def evaluate(model, X, y, sentences, top_k, lang):
-    y_pred = model.predict(X)
+def evaluate(model, x, y, sentences, top_k, lang):
+    y_pred = model.predict(x)
     system_summary = select_summary(sentences, y_pred, top_k)
     reference_summary = select_summary(sentences, y, top_k)
     bert = compute_bertscore(system_summary, reference_summary, lang)
@@ -87,7 +89,8 @@ def main():
     x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test = train_test_val_split(x, y, sentences)
 
     best_alpha, best_score = None, 0
-    for alpha in [i / 10 for i in range(1, 100)]:
+    #for alpha in [i / 10 for i in range(1, 100)]:
+    for alpha in [1]:
         model = train_regression(x_train, y_train, alpha=alpha)
         bert = evaluate(model, x_val, y_val, s_val, args.top_k, args.language)
         if bert["f1"] > best_score:
