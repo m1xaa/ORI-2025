@@ -51,6 +51,9 @@ def collect_training_samples(
         all_labels.append(labels)
         all_sentences.extend(s['text'] for s in segments)
 
+    all_features = np.vstack(all_features)
+    all_labels = np.concatenate(all_labels)
+
     return all_features, all_labels, all_sentences
 
 
@@ -107,8 +110,7 @@ def main():
     joblib.dump(final_model, args.model_out)
     print(f"Saved final model to {args.model_out}")
 
-    rouge, bert = evaluate(final_model, x_test, y_test, s_test, args.top_k, args.language)
-    print("Final Test ROUGE:", rouge)
+    bert = evaluate(final_model, x_test, y_test, s_test, args.top_k, args.language)
     print("Final Test BERTScore:", bert)
 
 
