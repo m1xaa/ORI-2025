@@ -4,15 +4,21 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 
 
-def train_test_val_split(x, y, sentences):
-    x_train, x_temp, y_train, y_temp, s_train, s_temp = train_test_split(
-        x, y, sentences, test_size=0.30, random_state=42, shuffle=True
-    )
-    x_val, x_test, y_val, y_test, s_val, s_test = train_test_split(
-        x_temp, y_temp, s_temp, test_size=0.5, random_state=42, shuffle=True
+def train_test_val_split(x, y, sentences, groups, val_ratio=0.15, test_ratio=0.15):
+    from sklearn.model_selection import train_test_split
+
+    x_train, x_temp, y_train, y_temp, s_train, s_temp, groups_train, groups_temp = train_test_split(
+        x, y, sentences, groups, test_size=val_ratio + test_ratio, random_state=42, shuffle=True
     )
 
-    return x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test
+    val_ratio_adjusted = val_ratio / (val_ratio + test_ratio)
+    x_val, x_test, y_val, y_test, s_val, s_test, groups_val, groups_test = train_test_split(
+        x_temp, y_temp, s_temp, groups_temp, test_size=1 - val_ratio_adjusted, random_state=42, shuffle=True
+    )
+
+    return (x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test,
+            groups_train, groups_val, groups_test)
+
 
 
 def normalize(array: np.ndarray) -> np.ndarray:

@@ -1,7 +1,7 @@
 import argparse
 
 from text_processing import normalize_segments
-from thesis_generation import generate_theses
+from theses_generation import generate_theses
 
 from utils import save_markdown_table
 from whisper_asr import transcribe_video

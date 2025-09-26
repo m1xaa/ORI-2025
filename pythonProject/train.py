@@ -3,7 +3,7 @@ import os
 import joblib
 import numpy as np
 from tqdm import tqdm
-
+import xgboost as xgb
 import constants
 from data.TVSum.load_annotations import load_annotations
 from evaluation import compute_bertscore
@@ -27,7 +27,7 @@ def collect_training_samples(
         raise NotImplementedError("SumME not implemented yet")
     videos_dir = os.path.join(root, constants.VIDEOS_DIR)
 
-    all_features, all_labels, all_sentences = [], [], []
+    all_features, all_labels, all_sentences, all_group_sizes = [], [], [], []
     for video_id, metadata in tqdm(annotations.items(), desc=f"Preparing {dataset} sentences"):
         path_to_video = None
         for ext in constants.VIDEO_EXTENSIONS:
@@ -50,16 +50,25 @@ def collect_training_samples(
         all_features.append(features)
         all_labels.append(labels)
         all_sentences.extend(s['text'] for s in segments)
+        all_group_sizes.extend([1] * len(segments))
 
     all_features = np.vstack(all_features)
     all_labels = np.concatenate(all_labels)
 
-    return all_features, all_labels, all_sentences
+    return all_features, all_labels, all_sentences, all_group_sizes
 
 
-def train_regression(X: np.ndarray, y: np.ndarray, alpha: float = 1.0) -> Ridge:
-    model = Ridge(alpha=alpha)
-    model.fit(X, y)
+def train_ranker(X: np.ndarray, y: np.ndarray, group):
+    dtrain = xgb.DMatrix(X, label=y)
+    dtrain.set_group(group)  # važno za ranking
+    params = {
+        "objective": "rank:pairwise",
+        "eta": 0.1,
+        "max_depth": 6,
+        "eval_metric": "ndcg",
+        "verbosity": 1
+    }
+    model = xgb.train(params, dtrain, num_boost_round=100)
     return model
 
 
@@ -68,10 +77,14 @@ def select_summary(sentences, scores, top_k):
     return [sentences[i] for i in idx]
 
 
-def evaluate(model, x, y, sentences, top_k, lang):
-    y_pred = model.predict(x)
-    system_summary = select_summary(sentences, y_pred, top_k)
-    reference_summary = select_summary(sentences, y, top_k)
+def evaluate(model, x, y_true, sentences, group, top_k, lang):
+    dmatrix = xgb.DMatrix(x)
+    dmatrix.set_group(group)
+    scores = model.predict(dmatrix)
+    top_indices_pred = np.argsort(scores)[::-1][:top_k]
+    system_summary = [sentences[i] for i in top_indices_pred]
+    top_indices_ref = np.argsort(y_true)[::-1][:top_k]
+    reference_summary = [sentences[i] for i in top_indices_ref]
     bert = compute_bertscore(system_summary, reference_summary, lang)
     return bert
 
@@ -87,30 +100,27 @@ def main():
     ap.add_argument("--top_k", type=int, default=5, help="Number of sentences in summary")
     args = ap.parse_args()
 
-    x, y, sentences = collect_training_samples(args.dataset, args.root, args.whisper_model, args.language,
-                                               args.embedding_model)
-    x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test = train_test_val_split(x, y, sentences)
+    x, y, sentences, sentence_lengths = collect_training_samples(args.dataset, args.root, args.whisper_model,
+                                                                 args.language,
+                                                                 args.embedding_model)
+    x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test, groups_train, groups_val, groups_test = train_test_val_split(
+        x, y, sentences, sentence_lengths)
 
-    best_alpha, best_score = None, 0
-    #for alpha in [i / 10 for i in range(1, 100)]:
-    for alpha in [1]:
-        model = train_regression(x_train, y_train, alpha=alpha)
-        bert = evaluate(model, x_val, y_val, s_val, args.top_k, args.language)
-        if bert["f1"] > best_score:
-            best_score = bert["f1"]
-            best_alpha = alpha
+    model = train_ranker(x_train, y_train, groups_train)
+    bert = evaluate(model, x_val, y_val, s_val, groups_val, args.top_k, args.language)
 
-    print(f"Best alpha (on val): {best_alpha}, BERT-F1={best_score:.4f}")
+    print("Bert score: ", bert)
 
     x_train_val = np.vstack([x_train, x_val])
     y_train_val = np.concatenate([y_train, y_val])
-    final_model = train_regression(x_train_val, y_train_val, alpha=best_alpha)
+    groups_train_val = np.concatenate([groups_train, groups_val])
+    final_model = train_ranker(x_train_val, y_train_val, groups_train_val)
 
     os.makedirs(os.path.dirname(args.model_out), exist_ok=True)
     joblib.dump(final_model, args.model_out)
     print(f"Saved final model to {args.model_out}")
 
-    bert = evaluate(final_model, x_test, y_test, s_test, args.top_k, args.language)
+    bert = evaluate(final_model, x_test, y_test, s_test, groups_test, args.top_k, args.language)
     print("Final Test BERTScore:", bert)
 
 
