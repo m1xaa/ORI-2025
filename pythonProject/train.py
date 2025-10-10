@@ -3,11 +3,10 @@ import os
 import joblib
 import numpy as np
 from tqdm import tqdm
-import xgboost as xgb
 import constants
 from data.TVSum.load_annotations import load_annotations
-from evaluation import compute_bertscore
 from featurization import align_segments_with_user_scores, make_feature_matrix
+from ranker import train_ranker, evaluate_model
 from scene_detect import detect_scenes
 from text_processing import normalize_segments
 from utils import train_test_val_split
@@ -46,12 +45,8 @@ def collect_training_samples(
             continue
 
         video_segments = []
-        i = 0
-        print(len(scenes))
         for scene in scenes:
             scene_segments = transcribe_video(path_to_video, whisper_model, language, scene["start"], scene["end"])
-            print("gotova transkripcija: ", i)
-            i += 1
             if not scene_segments:
                 continue
             video_segments.extend(scene_segments)
@@ -74,37 +69,6 @@ def collect_training_samples(
     return all_features, all_labels, all_sentences, all_group_sizes
 
 
-def train_ranker(X: np.ndarray, y: np.ndarray, group):
-    dtrain = xgb.DMatrix(X, label=y)
-    dtrain.set_group(group) 
-    params = {
-        "objective": "rank:pairwise",
-        "eta": 0.1,
-        "max_depth": 6,
-        "eval_metric": "ndcg",
-        "verbosity": 1
-    }
-    model = xgb.train(params, dtrain, num_boost_round=100)
-    return model
-
-
-def select_summary(sentences, scores, top_k):
-    idx = np.argsort(scores)[::-1][:top_k]
-    return [sentences[i] for i in idx]
-
-
-def evaluate(model, x, y_true, sentences, group, top_k, lang):
-    dmatrix = xgb.DMatrix(x)
-    dmatrix.set_group(group)
-    scores = model.predict(dmatrix)
-    top_indices_pred = np.argsort(scores)[::-1][:top_k]
-    system_summary = [sentences[i] for i in top_indices_pred]
-    top_indices_ref = np.argsort(y_true)[::-1][:top_k]
-    reference_summary = [sentences[i] for i in top_indices_ref]
-    bert = compute_bertscore(system_summary, reference_summary, lang)
-    return bert
-
-
 def main():
     ap = argparse.ArgumentParser(description="Train supervised sentence ranker on TVSum/SumMe (Ridge only)")
     ap.add_argument("--dataset", required=True, choices=["tvsum", "summe"])
@@ -123,9 +87,7 @@ def main():
         x, y, sentences, sentence_lengths)
 
     model = train_ranker(x_train, y_train, groups_train)
-    bert = evaluate(model, x_val, y_val, s_val, groups_val, args.top_k, args.language)
-
-    print("Bert score: ", bert)
+    bert = evaluate_model(model, x_val, y_val, s_val, groups_val, args.top_k, args.language)
 
     x_train_val = np.vstack([x_train, x_val])
     y_train_val = np.concatenate([y_train, y_val])
@@ -136,7 +98,7 @@ def main():
     joblib.dump(final_model, args.model_out)
     print(f"Saved final model to {args.model_out}")
 
-    bert = evaluate(final_model, x_test, y_test, s_test, groups_test, args.top_k, args.language)
+    bert = evaluate_model(final_model, x_test, y_test, s_test, groups_test, args.top_k, args.language)
     print("Final Test BERTScore:", bert)
 
 
