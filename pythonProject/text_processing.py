@@ -1,9 +1,6 @@
 import re
 from typing import Dict, List, Any, Set
 
-from fontTools import unicodedata
-from nltk import SnowballStemmer
-
 FILLERS_SR: Set[str] = {
     "ovaj", "ono", "znači", "mislim", "pa", "eee", "uh", "eto", "hm", "aha",
     "ma", "a", "dakle", "onako", "ustvari", "ovome", "ovoga", "ovde", "ovdeka",
@@ -26,30 +23,18 @@ FILLERS_EN: Set[str] = {
     "by the way", "to be honest", "frankly", "basically like"
 }
 
-STEMMERS = {
-    "en": SnowballStemmer("english"),
-    "sr": SnowballStemmer("serbian")
-}
-
 
 def normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip())
 
 
-def normalize_case(text: str) -> str:
-    text = text.lower()
-    text = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in text if not unicodedata.combining(c))
-
-
-def remove_redundant_punctuation(text: str) -> str:
+def fix_punctuation_spacing(text: str) -> str:
     return re.sub(r"\s([?.!,;:])", r"\1", text)
 
 
 def normalize_text(text: str) -> str:
     text = normalize_whitespace(text)
-    text = normalize_case(text)
-    text = remove_redundant_punctuation(text)
+    text = fix_punctuation_spacing(text)
     return text
 
 
@@ -63,21 +48,11 @@ def remove_fillers(text: str, lang: str) -> str:
     return normalize_whitespace(text)
 
 
-def stem_text(text: str, lang: str) -> str:
-    stemmer = STEMMERS.get(lang[:2])
-    if not stemmer:
-        return text
-    tokens = re.findall(r"\w+", text)
-    stemmed = [stemmer.stem(t) for t in tokens]
-    return " ".join(stemmed)
-
-
 def normalize_segments(segments: List[Dict[str, Any]], lang: str) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     for seg in segments:
         text = normalize_text(seg["text"])
         text = remove_fillers(text, lang=lang)
-        text = stem_text(text, lang=lang)
 
         if text:
             results.append({
@@ -85,4 +60,24 @@ def normalize_segments(segments: List[Dict[str, Any]], lang: str) -> List[Dict[s
                 "end": seg["end"],
                 "text": text
             })
-    return results
+    return merge_short_segments(results)
+
+
+def merge_short_segments(segments: List[Dict[str, Any]], min_duration: float = 4.0) -> List[Dict[str, Any]]:
+    if not segments:
+        return []
+
+    merged = []
+    buffer = {"start": segments[0]["start"], "end": segments[0]["end"], "text": segments[0]["text"]}
+
+    for seg in segments[1:]:
+        current_duration = buffer["end"] - buffer["start"]
+        if current_duration < min_duration:
+            buffer["end"] = seg["end"]
+            buffer["text"] += " " + seg["text"]
+        else:
+            merged.append(buffer)
+            buffer = {"start": seg["start"], "end": seg["end"], "text": seg["text"]}
+
+    merged.append(buffer)
+    return merged
