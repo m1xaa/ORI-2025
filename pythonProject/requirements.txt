@@ -10,3 +10,4 @@ rouge-score
 joblib
 tqdm
 xgboost
+scenedetect[opencv]

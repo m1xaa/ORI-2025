@@ -1,5 +1,7 @@
 import argparse
+import os
 
+from scene_detect import detect_scenes
 from text_processing import normalize_segments
 from theses_generation import generate_theses
 
@@ -16,9 +18,26 @@ def run_pipeline(
     top_k: int,
     path_to_model: str
 ):
-    segments = normalize_segments(transcribe_video(path_to_video, whisper_model, language), language)
-    theses = generate_theses(segments, top_k, embedding_model, path_to_model)
+    scenes = detect_scenes(path_to_video)
+    all_segments = []
+    for scene in scenes:
+        segments = transcribe_video(
+            path_to_video,
+            whisper_model,
+            language,
+            start_time=scene["start"],
+            end_time=scene["end"]
+        )
+
+        segments = normalize_segments(segments, language)
+        if not segments:
+            continue
+        all_segments.extend(segments)
+
+    theses = generate_theses(all_segments, top_k, embedding_model, path_to_model)
+    os.makedirs(os.path.dirname(output_directory), exist_ok=True)
     save_markdown_table(theses, output_directory)
+
 
 
 def main():

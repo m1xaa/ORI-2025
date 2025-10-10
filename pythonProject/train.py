@@ -8,10 +8,11 @@ import constants
 from data.TVSum.load_annotations import load_annotations
 from evaluation import compute_bertscore
 from featurization import align_segments_with_user_scores, make_feature_matrix
+from scene_detect import detect_scenes
 from text_processing import normalize_segments
 from utils import train_test_val_split
 from whisper_asr import transcribe_video
-from sklearn.linear_model import Ridge
+
 
 
 def collect_training_samples(
@@ -39,9 +40,24 @@ def collect_training_samples(
             print(f"[warn] Missing video file for {video_id}, skipping")
             continue
 
-        segments = transcribe_video(path_to_video, whisper_model, language)
-        segments = normalize_segments(segments, language)
-        if not segments or len(segments) == 0 or all(s['text'].strip() == "" for s in segments):
+        scenes = detect_scenes(path_to_video)
+        if not scenes:
+            print(f"[warn] no detected scenes for {video_id}, skipping")
+            continue
+
+        video_segments = []
+        i = 0
+        print(len(scenes))
+        for scene in scenes:
+            scene_segments = transcribe_video(path_to_video, whisper_model, language, scene["start"], scene["end"])
+            print("gotova transkripcija: ", i)
+            i += 1
+            if not scene_segments:
+                continue
+            video_segments.extend(scene_segments)
+
+        segments = normalize_segments(video_segments, language)
+        if not segments or all(s['text'].strip() == "" for s in segments):
             continue
 
         labels = align_segments_with_user_scores(segments, metadata['user_scores'], metadata['fps'])
@@ -60,7 +76,7 @@ def collect_training_samples(
 
 def train_ranker(X: np.ndarray, y: np.ndarray, group):
     dtrain = xgb.DMatrix(X, label=y)
-    dtrain.set_group(group)  # važno za ranking
+    dtrain.set_group(group) 
     params = {
         "objective": "rank:pairwise",
         "eta": 0.1,
