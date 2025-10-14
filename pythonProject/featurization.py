@@ -60,10 +60,12 @@ def make_feature_matrix(segments: List[Dict[str, Any]], embedding_model_name: st
     normalized_tfidf = normalize(compute_tfidf_scores(texts))
     normalized_textrank = normalize(compute_textrank_scores(texts))
     text_lengths = normalize(np.array([len(text) for text in texts], dtype=float))
+    position = normalize(np.array([i for i in range(len(segments))]))
     embeddings = embed_sentences(texts, embedding_model_name)
 
     features = np.column_stack([
         embeddings,
+        position,
         normalized_tfidf,
         normalized_textrank,
         text_lengths

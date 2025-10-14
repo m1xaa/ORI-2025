@@ -7,11 +7,9 @@ import constants
 from data.TVSum.load_annotations import load_annotations
 from featurization import align_segments_with_user_scores, make_feature_matrix
 from ranker import train_ranker, evaluate_model
-from scene_detect import detect_scenes
 from text_processing import normalize_segments
 from utils import train_test_val_split
 from whisper_asr import transcribe_video
-
 
 
 def collect_training_samples(
@@ -39,19 +37,10 @@ def collect_training_samples(
             print(f"[warn] Missing video file for {video_id}, skipping")
             continue
 
-        scenes = detect_scenes(path_to_video)
-        if not scenes:
-            print(f"[warn] no detected scenes for {video_id}, skipping")
-            continue
-
-        video_segments = []
-        for scene in scenes:
-            scene_segments = transcribe_video(path_to_video, whisper_model, language, scene["start"], scene["end"])
-            if not scene_segments:
-                continue
-            video_segments.extend(scene_segments)
-
-        segments = normalize_segments(video_segments, language)
+        segments = normalize_segments(
+            transcribe_video(path_to_video, whisper_model, language),
+            language
+        )
         if not segments or all(s['text'].strip() == "" for s in segments):
             continue
 
@@ -87,7 +76,8 @@ def main():
         x, y, sentences, sentence_lengths)
 
     model = train_ranker(x_train, y_train, groups_train)
-    bert = evaluate_model(model, x_val, y_val, s_val, groups_val, args.top_k, args.language)
+    val_bert = evaluate_model(model, x_val, y_val, s_val, groups_val, args.top_k, args.language)
+    print("BERTScore on val: ", val_bert)
 
     x_train_val = np.vstack([x_train, x_val])
     y_train_val = np.concatenate([y_train, y_val])

@@ -1,7 +1,6 @@
 import argparse
 import os
 
-from scene_detect import detect_scenes
 from text_processing import normalize_segments
 from theses_generation import generate_theses
 
@@ -10,34 +9,18 @@ from whisper_asr import transcribe_video
 
 
 def run_pipeline(
-    path_to_video: str,
-    output_directory: str,
-    whisper_model: str,
-    language: str,
-    embedding_model: str,
-    top_k: int,
-    path_to_model: str
+        path_to_video: str,
+        output_directory: str,
+        whisper_model: str,
+        language: str,
+        embedding_model: str,
+        top_k: int,
+        path_to_model: str
 ):
-    scenes = detect_scenes(path_to_video)
-    all_segments = []
-    for scene in scenes:
-        segments = transcribe_video(
-            path_to_video,
-            whisper_model,
-            language,
-            start_time=scene["start"],
-            end_time=scene["end"]
-        )
-
-        segments = normalize_segments(segments, language)
-        if not segments:
-            continue
-        all_segments.extend(segments)
-
-    theses = generate_theses(all_segments, top_k, embedding_model, path_to_model)
+    segments = normalize_segments(transcribe_video(path_to_video, whisper_model, language), language)
+    theses = generate_theses(segments, top_k, embedding_model, path_to_model)
     os.makedirs(os.path.dirname(output_directory), exist_ok=True)
     save_markdown_table(theses, output_directory)
-
 
 
 def main():
@@ -51,7 +34,8 @@ def main():
     ap.add_argument("--ranker_model", default=None, help="Path to joblib model")
     args = ap.parse_args()
 
-    run_pipeline(args.video_path, args.output, args.whisper_model, args.language, args.embedding_model, args.top_k, args.ranker_model)
+    run_pipeline(args.video_path, args.output, args.whisper_model, args.language, args.embedding_model, args.top_k,
+                 args.ranker_model)
 
 
 if __name__ == '__main__':

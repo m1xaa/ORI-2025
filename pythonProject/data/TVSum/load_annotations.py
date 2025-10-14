@@ -5,6 +5,7 @@ import numpy as np
 
 import constants
 
+
 def _hdf5_char_array_to_str(char_array):
     a = np.array(char_array).astype(np.uint16).flatten()
     return ''.join(chr(int(c)) for c in a)
@@ -44,5 +45,3 @@ def load_annotations(root: str):
             }
 
     return annotations
-
-

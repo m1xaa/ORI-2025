@@ -1,6 +1,6 @@
-h5py
 pandas
-numpy
+numpy==1.26.4
+h5py==3.10.0
 openai-whisper
 networkx
 sentence-transformers

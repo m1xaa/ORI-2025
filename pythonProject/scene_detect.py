@@ -2,6 +2,7 @@ from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 
 
+# Not used because it just prolongs the training period without real benefits in model quality
 def detect_scenes(video_path: str, threshold: float = 40.0):
     video = open_video(video_path)
 
