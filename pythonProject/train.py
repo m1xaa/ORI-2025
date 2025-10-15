@@ -38,7 +38,6 @@ def collect_training_samples(
             print(f"[warn] Missing video file for {video_id}, skipping")
             continue
 
-        # Check for cached segments
         cached_path = os.path.join(segments_dir, f"{video_id}_segments.json")
         if os.path.exists(cached_path):
             with open(cached_path, "r", encoding="utf-8") as f:
