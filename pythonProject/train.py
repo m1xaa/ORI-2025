@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import joblib
 import numpy as np
@@ -13,20 +14,20 @@ from whisper_asr import transcribe_video
 
 
 def collect_training_samples(
-        dataset: str,
         root: str,
         whisper_model: str,
         language: str,
         embedding_model_name: str
 ):
-    if dataset == "tvsum":
-        annotations = load_annotations(root)
-    else:
-        raise NotImplementedError("SumME not implemented yet")
+    annotations = load_annotations(root)
+
     videos_dir = os.path.join(root, constants.VIDEOS_DIR)
+    segments_dir = os.path.join(root, "segments_cache")
+    os.makedirs(segments_dir, exist_ok=True)
 
     all_features, all_labels, all_sentences, all_group_sizes = [], [], [], []
-    for video_id, metadata in tqdm(annotations.items(), desc=f"Preparing {dataset} sentences"):
+
+    for video_id, metadata in tqdm(annotations.items(), desc=f"Preparing sentences"):
         path_to_video = None
         for ext in constants.VIDEO_EXTENSIONS:
             path = os.path.join(videos_dir, video_id + ext)
@@ -37,12 +38,21 @@ def collect_training_samples(
             print(f"[warn] Missing video file for {video_id}, skipping")
             continue
 
-        segments = normalize_segments(
-            transcribe_video(path_to_video, whisper_model, language),
-            language
-        )
-        if not segments or all(s['text'].strip() == "" for s in segments):
-            continue
+        # Check for cached segments
+        cached_path = os.path.join(segments_dir, f"{video_id}_segments.json")
+        if os.path.exists(cached_path):
+            with open(cached_path, "r", encoding="utf-8") as f:
+                segments = json.load(f)
+        else:
+            segments = normalize_segments(
+                transcribe_video(path_to_video, whisper_model, language),
+                language
+            )
+            if not segments or all(s['text'].strip() == "" for s in segments):
+                continue
+
+            with open(cached_path, "w", encoding="utf-8") as f:
+                json.dump(segments, f, ensure_ascii=False, indent=2)
 
         labels = align_segments_with_user_scores(segments, metadata['user_scores'], metadata['fps'])
         features = make_feature_matrix(segments, embedding_model_name)
@@ -60,7 +70,6 @@ def collect_training_samples(
 
 def main():
     ap = argparse.ArgumentParser(description="Train supervised sentence ranker on TVSum/SumMe (Ridge only)")
-    ap.add_argument("--dataset", required=True, choices=["tvsum", "summe"])
     ap.add_argument("--root", required=True, help="Dataset root directory")
     ap.add_argument("--whisper_model", default="small")
     ap.add_argument("--embedding_model", default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
@@ -69,7 +78,7 @@ def main():
     ap.add_argument("--top_k", type=int, default=5, help="Number of sentences in summary")
     args = ap.parse_args()
 
-    x, y, sentences, sentence_lengths = collect_training_samples(args.dataset, args.root, args.whisper_model,
+    x, y, sentences, sentence_lengths = collect_training_samples(args.root, args.whisper_model,
                                                                  args.language,
                                                                  args.embedding_model)
     x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test, groups_train, groups_val, groups_test = train_test_val_split(
