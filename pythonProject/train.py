@@ -22,7 +22,7 @@ def collect_training_samples(
     annotations = load_annotations(root)
 
     videos_dir = os.path.join(root, constants.VIDEOS_DIR)
-    segments_dir = os.path.join(root, "segments_cache")
+    segments_dir = os.path.join(root, constants.SEGMENTS_CACHE)
     os.makedirs(segments_dir, exist_ok=True)
 
     all_features, all_labels, all_sentences, all_group_sizes = [], [], [], []
