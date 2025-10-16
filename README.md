@@ -103,6 +103,8 @@ Then you will need to specify the following command line arguments:
 - **ranker_model**, the path to your trained model for ranking theses
 - **top_k**, the top k most rated theses that model will be traind on, default is 5
 
+Also there is an optional parameter **generative_model** for if you want a model to generate a summary of each thesis
+
 
 
 
