@@ -63,7 +63,7 @@ def normalize_segments(segments: List[Dict[str, Any]], lang: str) -> List[Dict[s
     return merge_short_segments(results)
 
 
-def merge_short_segments(segments: List[Dict[str, Any]], min_duration: float = 4.0) -> List[Dict[str, Any]]:
+def merge_short_segments(segments: List[Dict[str, Any]], min_duration: float = 30.0) -> List[Dict[str, Any]]:
     if not segments:
         return []
 

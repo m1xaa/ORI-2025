@@ -11,3 +11,4 @@ joblib
 tqdm
 xgboost
 scenedetect[opencv]
+scikit-learn

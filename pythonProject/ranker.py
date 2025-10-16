@@ -4,9 +4,9 @@ import xgboost as xgb
 from evaluation import compute_bertscore
 
 
-def train_ranker(X: np.ndarray, y: np.ndarray, group):
-    dtrain = xgb.DMatrix(X, label=y)
-    dtrain.set_group(group)
+def train_ranker(x: np.ndarray, y: np.ndarray, group):
+    d_train = xgb.DMatrix(x, label=y)
+    d_train.set_group(group)
     params = {
         "objective": "rank:pairwise",
         "eta": 0.1,
@@ -14,7 +14,7 @@ def train_ranker(X: np.ndarray, y: np.ndarray, group):
         "eval_metric": "ndcg",
         "verbosity": 1
     }
-    model = xgb.train(params, dtrain, num_boost_round=100)
+    model = xgb.train(params, d_train, num_boost_round=100)
     return model
 
 
