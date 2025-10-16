@@ -4,8 +4,6 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 import networkx as nx
 
-from utils import normalize
-
 
 def align_segments_with_user_scores(
         segments: List[Dict[str, Any]],
@@ -13,17 +11,15 @@ def align_segments_with_user_scores(
         fps: float
 ):
     average_frame_importance = user_scores.mean(axis=1)
-    min_importance, max_importance = average_frame_importance.min(), average_frame_importance.max()
-    normalized_frame_importance = (average_frame_importance - min_importance) / (max_importance - min_importance + 1e-8)
 
     labels = []
-    number_of_frames = len(normalized_frame_importance)
+    number_of_frames = len(average_frame_importance)
     for segment in segments:
         start = segment['start']
         end = segment['end']
         start_idx = max(0, round(start * fps))
         end_idx = min(round(end * fps), number_of_frames - 1)
-        segment_window = normalized_frame_importance[start_idx:end_idx]
+        segment_window = average_frame_importance[start_idx:end_idx]
         if segment_window.size <= 0:
             labels.append(0.0)
         else:
@@ -50,24 +46,24 @@ def compute_textrank_scores(texts: List[str]) -> np.ndarray:
 
 def embed_sentences(texts: List[str], model_name: str):
     model = SentenceTransformer(model_name)
-    embs = model.encode(texts, normalize_embeddings=True)
+    embs = model.encode(texts)
     return np.asarray(embs)
 
 
 def make_feature_matrix(segments: List[Dict[str, Any]], embedding_model_name: str):
     texts = [s['text'] for s in segments]
 
-    normalized_tfidf = normalize(compute_tfidf_scores(texts))
-    normalized_textrank = normalize(compute_textrank_scores(texts))
-    text_lengths = normalize(np.array([len(text) for text in texts], dtype=float))
-    position = normalize(np.array([i for i in range(len(segments))]))
+    tfidf = compute_tfidf_scores(texts)
+    textrank = compute_textrank_scores(texts)
+    text_lengths = np.array([len(text) for text in texts], dtype=float)
+    position = np.array([i for i in range(len(segments))])
     embeddings = embed_sentences(texts, embedding_model_name)
 
     features = np.column_stack([
         embeddings,
         position,
-        normalized_tfidf,
-        normalized_textrank,
+        tfidf,
+        textrank,
         text_lengths
     ])
 

@@ -1,26 +1,47 @@
-from typing import List, Dict, Any, Tuple
 import numpy as np
-import bert_score
-from rouge_score import rouge_scorer
+import xgboost as xgb
 
 
-def compute_rouge(hypotheses: List[str], references: List[str]) -> Dict[str, float]:
-    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-    scores = {'rouge1': 0.0, 'rouge2': 0.0, 'rougeL': 0.0}
-    for h, r in zip(hypotheses, references):
-        s = scorer.score(r, h)
-        for k in scores:
-            scores[k] += s[k].fmeasure
-    for k in scores:
-        scores[k] /= max(1, len(hypotheses))
-    return scores
+from scipy.stats import kendalltau
+
+def normalized_discounted_cumulative_gain(y_true, y_pred, k):
+    k = min(k, len(y_true))
+    idx = np.argsort(-y_pred)[:k]
+    gains = 2 ** y_true[idx] - 1
+    discounts = 1.0 / np.log2(np.arange(2, k + 2))
+    dcg = np.sum(gains * discounts)
+
+    idx_ideal = np.argsort(-y_true)[:k]
+    gains_ideal = 2 ** y_true[idx_ideal] - 1
+    idcg = np.sum(gains_ideal * discounts) + 1e-12
+    return dcg / idcg
 
 
-def compute_bertscore(hypotheses: List[str], references: List[str], lang: str) -> Dict[str, float]:
-    P, R, F1 = bert_score.score(hypotheses, references, lang=lang)
+def evaluate_ranking_metrics(y_true, y_pred, groups, top_k=5):
+    ndcgs, taus = [], []
+    start = 0
+
+    for g in groups:
+        end = start + g
+        yt = y_true[start:end]
+        yp = y_pred[start:end]
+
+        ndcgs.append(normalized_discounted_cumulative_gain(yt, yp, top_k))
+        tau, _ = kendalltau(yt, yp)
+        taus.append(0.0 if np.isnan(tau) else tau)
+        start = end
+
     return {
-        "precision": float(P.mean().item()),
-        "recall": float(R.mean().item()),
-        "f1": float(F1.mean().item())
+        "ndcg@k": float(np.mean(ndcgs)),
+        "kendall_tau": float(np.mean(taus))
     }
+
+
+def evaluate_model(model, x, y_true, sentences, groups, top_k, lang):
+    d_matrix = xgb.DMatrix(x)
+    d_matrix.set_group(groups)
+    scores = model.predict(d_matrix)
+
+    metrics = evaluate_ranking_metrics(y_true, scores, groups, top_k)
+    return metrics
 

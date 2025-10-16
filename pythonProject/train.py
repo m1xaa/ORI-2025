@@ -6,8 +6,9 @@ import numpy as np
 from tqdm import tqdm
 import constants
 from data.TVSum.load_annotations import load_annotations
+from evaluation import evaluate_model
 from featurization import align_segments_with_user_scores, make_feature_matrix
-from ranker import train_ranker, evaluate_model
+from ranker import train_ranker
 from text_processing import normalize_segments
 from utils import train_test_val_split
 from whisper_asr import transcribe_video
@@ -68,7 +69,7 @@ def collect_training_samples(
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Train supervised sentence ranker on TVSum/SumMe (Ridge only)")
+    ap = argparse.ArgumentParser(description="Train supervised sentence ranker on TVSum/SumMe (with hyperparameter tuning using nDCG@K)")
     ap.add_argument("--root", required=True, help="Dataset root directory")
     ap.add_argument("--whisper_model", default="small")
     ap.add_argument("--embedding_model", default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
@@ -77,27 +78,69 @@ def main():
     ap.add_argument("--top_k", type=int, default=5, help="Number of sentences in summary")
     args = ap.parse_args()
 
-    x, y, sentences, sentence_lengths = collect_training_samples(args.root, args.whisper_model,
-                                                                 args.language,
-                                                                 args.embedding_model)
+    x, y, sentences, sentence_lengths = collect_training_samples(
+        args.root, args.whisper_model, args.language, args.embedding_model
+    )
     x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test, groups_train, groups_val, groups_test = train_test_val_split(
-        x, y, sentences, sentence_lengths)
+        x, y, sentences, sentence_lengths
+    )
 
-    model = train_ranker(x_train, y_train, groups_train)
-    val_bert = evaluate_model(model, x_val, y_val, s_val, groups_val, args.top_k, args.language)
-    print("BERTScore on val: ", val_bert)
+    eta_values = [0.05, 0.1, 0.15, 0.2, 0.25]
+    max_depth_values = [2, 4, 6, 8, 10]
+    num_boost_round_values = [50, 100, 150, 200]
+
+    best_score = -1.0
+    best_params = None
+
+    for eta in eta_values:
+        for max_depth in max_depth_values:
+            for num_round in num_boost_round_values:
+                params = {
+                    "objective": "rank:pairwise",
+                    "eta": eta,
+                    "max_depth": max_depth,
+                    "eval_metric": "ndcg",
+                    "verbosity": 0
+                }
+
+                model = train_ranker(x_train, y_train, groups_train, params, num_boost_round=num_round)
+                val_metrics = evaluate_model(model, x_val, y_val, s_val, groups_val, args.top_k, args.language)
+
+                val_ndcg = val_metrics["ndcg@k"]
+                val_tau = val_metrics["kendall_tau"]
+
+                print(f"eta={eta}, depth={max_depth}, rounds={num_round} → nDCG@{args.top_k}={val_ndcg:.4f}, Kendall τ={val_tau:.4f}")
+
+                if val_ndcg > best_score:
+                    best_score = val_ndcg
+                    best_params = (eta, max_depth, num_round)
+
+    print(f"Best params: eta={best_params[0]}, depth={best_params[1]}, rounds={best_params[2]} → nDCG@{args.top_k}={best_score:.4f}")
 
     x_train_val = np.vstack([x_train, x_val])
     y_train_val = np.concatenate([y_train, y_val])
     groups_train_val = np.concatenate([groups_train, groups_val])
-    final_model = train_ranker(x_train_val, y_train_val, groups_train_val)
+
+    final_params = {
+        "objective": "rank:pairwise",
+        "eta": best_params[0],
+        "max_depth": best_params[1],
+        "eval_metric": "ndcg",
+        "verbosity": 1
+    }
+
+    final_model = train_ranker(
+        x_train_val, y_train_val, groups_train_val,
+        final_params, num_boost_round=best_params[2]
+    )
 
     os.makedirs(os.path.dirname(args.model_out), exist_ok=True)
     joblib.dump(final_model, args.model_out)
     print(f"Saved final model to {args.model_out}")
 
-    bert = evaluate_model(final_model, x_test, y_test, s_test, groups_test, args.top_k, args.language)
-    print("Final Test BERTScore:", bert)
+    test_metrics = evaluate_model(final_model, x_test, y_test, s_test, groups_test, args.top_k, args.language)
+    print(f"Final Test Results: nDCG@{args.top_k}={test_metrics['ndcg@k']:.4f}, Kendall τ={test_metrics['kendall_tau']:.4f}")
+
 
 
 if __name__ == '__main__':
