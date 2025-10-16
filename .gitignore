@@ -2,3 +2,5 @@ videos/
 venv/
 out/
 segments_cache/
+*.mp4
+*.md
