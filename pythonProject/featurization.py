@@ -10,8 +10,7 @@ def align_segments_with_user_scores(
         user_scores: np.ndarray,
         fps: float
 ):
-    average_frame_importance = user_scores.mean(axis=1)
-
+    average_frame_importance = user_scores.mean(axis=0)
     labels = []
     number_of_frames = len(average_frame_importance)
     for segment in segments:
@@ -24,7 +23,6 @@ def align_segments_with_user_scores(
             labels.append(0.0)
         else:
             labels.append(segment_window.mean())
-
     return np.array(labels, dtype=float)
 
 
@@ -60,11 +58,11 @@ def make_feature_matrix(segments: List[Dict[str, Any]], embedding_model_name: st
     embeddings = embed_sentences(texts, embedding_model_name)
 
     features = np.column_stack([
-        embeddings,
-        position,
+        #embeddings,
+        #position,
         tfidf,
-        textrank,
-        text_lengths
+        #textrank,
+        #text_lengths
     ])
 
     return features
