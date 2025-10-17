@@ -10,8 +10,7 @@ def align_segments_with_user_scores(
         user_scores: np.ndarray,
         fps: float
 ):
-    average_frame_importance = user_scores.mean(axis=1)
-
+    average_frame_importance = user_scores.mean(axis=0)
     labels = []
     number_of_frames = len(average_frame_importance)
     for segment in segments:
@@ -24,7 +23,6 @@ def align_segments_with_user_scores(
             labels.append(0.0)
         else:
             labels.append(segment_window.mean())
-
     return np.array(labels, dtype=float)
 
 
