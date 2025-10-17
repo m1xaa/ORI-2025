@@ -130,10 +130,9 @@ def main():
                 val_metrics = evaluate_model(model, x_val, y_val, s_val, groups_val, args.top_k, args.language)
 
                 val_ndcg = val_metrics["ndcg@k"]
-                val_tau = val_metrics["kendall_tau"]
 
                 print(
-                    f"eta={eta}, depth={max_depth}, rounds={num_round} → nDCG@{args.top_k}={val_ndcg:.4f}, Kendall τ={val_tau:.4f}")
+                    f"eta={eta}, depth={max_depth}, rounds={num_round} → nDCG@{args.top_k}={val_ndcg:.4f}")
 
                 if val_ndcg > best_score:
                     best_score = val_ndcg
@@ -165,7 +164,7 @@ def main():
 
     test_metrics = evaluate_model(final_model, x_test, y_test, s_test, groups_test, args.top_k, args.language)
     print(
-        f"Final Test Results: nDCG@{args.top_k}={test_metrics['ndcg@k']:.4f}, Kendall τ={test_metrics['kendall_tau']:.4f}")
+        f"Final Test Results: nDCG@{args.top_k}={test_metrics['ndcg@k']:.4f}")
 
 
 if __name__ == '__main__':

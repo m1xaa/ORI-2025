@@ -18,7 +18,7 @@ def normalized_discounted_cumulative_gain(y_true, y_pred, k):
 
 
 def evaluate_ranking_metrics(y_true, y_pred, groups, top_k=5):
-    ndcgs, taus = [], []
+    ndcgs = []
     start = 0
 
     for g in groups:
@@ -27,13 +27,10 @@ def evaluate_ranking_metrics(y_true, y_pred, groups, top_k=5):
         yp = y_pred[start:end]
 
         ndcgs.append(normalized_discounted_cumulative_gain(yt, yp, top_k))
-        tau, _ = kendalltau(yt, yp)
-        taus.append(0.0 if np.isnan(tau) else tau)
         start = end
 
     return {
         "ndcg@k": float(np.mean(ndcgs)),
-        "kendall_tau": float(np.mean(taus))
     }
 
 
