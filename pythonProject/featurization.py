@@ -59,10 +59,10 @@ def make_feature_matrix(segments: List[Dict[str, Any]], embedding_model_name: st
 
     features = np.column_stack([
         #embeddings,
-        #position,
+        position,
         tfidf,
         #textrank,
-        #text_lengths
+        text_lengths
     ])
 
     return features

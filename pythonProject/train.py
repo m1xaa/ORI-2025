@@ -10,7 +10,7 @@ from evaluation import evaluate_model
 from featurization import align_segments_with_user_scores, make_feature_matrix
 from ranker import train_ranker
 from text_processing import normalize_segments
-from utils import train_test_val_split
+from utils import split_videos
 from whisper_asr import transcribe_video
 
 
@@ -26,7 +26,8 @@ def collect_training_samples(
     segments_dir = os.path.join(root, constants.SEGMENTS_CACHE)
     os.makedirs(segments_dir, exist_ok=True)
 
-    all_features, all_labels, all_sentences, all_group_sizes = [], [], [], []
+    train_video_ids, val_video_ids, test_video_ids = split_videos(list(annotations.keys()))
+    x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test, groups_train, groups_val, groups_test = [], [], [], [], [], [], [], [], [], [], [], []
 
     for video_id, metadata in tqdm(annotations.items(), desc=f"Preparing sentences"):
         path_to_video = None
@@ -57,19 +58,41 @@ def collect_training_samples(
         labels = align_segments_with_user_scores(segments, metadata['user_scores'], metadata['fps'])
         features = make_feature_matrix(segments, embedding_model_name)
 
-        all_features.append(features)
-        all_labels.append(labels)
-        all_sentences.extend(s['text'] for s in segments)
-        all_group_sizes.extend([1] * len(segments))
+        if video_id in train_video_ids:
+            x_train.append(features)
+            y_train.append(labels)
+            groups_train.append(len(segments))
+            s_train.append([s['text'] for s in segments])
 
-    all_features = np.vstack(all_features)
-    all_labels = np.concatenate(all_labels)
+        if video_id in val_video_ids:
+            x_val.append(features)
+            y_val.append(labels)
+            groups_val.append(len(segments))
+            s_val.append([s['text'] for s in segments])
 
-    return all_features, all_labels, all_sentences, all_group_sizes
+        if video_id in test_video_ids:
+            x_test.append(features)
+            y_test.append(labels)
+            groups_test.append(len(segments))
+            s_test.append([s['text'] for s in segments])
+
+    x_train = np.vstack(x_train)
+    y_train = np.concatenate(y_train)
+    x_val = np.vstack(x_val)
+    y_val = np.concatenate(y_val)
+    x_test = np.vstack(x_test)
+    y_test = np.concatenate(y_test)
+
+    groups_train = np.array(groups_train)
+    groups_val = np.array(groups_val)
+    groups_test = np.array(groups_test)
+
+    return x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test, groups_train, groups_val, groups_test
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Train supervised sentence ranker on TVSum/SumMe (with hyperparameter tuning using nDCG@K)")
+    ap = argparse.ArgumentParser(
+        description="Train supervised sentence ranker on TVSum/SumMe (with hyperparameter tuning using nDCG@K)")
     ap.add_argument("--root", required=True, help="Dataset root directory")
     ap.add_argument("--whisper_model", default="small")
     ap.add_argument("--embedding_model", default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
@@ -78,11 +101,11 @@ def main():
     ap.add_argument("--top_k", type=int, default=5, help="Number of sentences in summary")
     args = ap.parse_args()
 
-    x, y, sentences, sentence_lengths = collect_training_samples(
-        args.root, args.whisper_model, args.language, args.embedding_model
-    )
-    x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test, groups_train, groups_val, groups_test = train_test_val_split(
-        x, y, sentences, sentence_lengths
+    x_train, x_val, x_test, y_train, y_val, y_test, s_train, s_val, s_test, groups_train, groups_val, groups_test = collect_training_samples(
+        args.root,
+        args.whisper_model,
+        args.language,
+        args.embedding_model
     )
 
     eta_values = [0.05, 0.1, 0.15, 0.2, 0.25]
@@ -109,13 +132,15 @@ def main():
                 val_ndcg = val_metrics["ndcg@k"]
                 val_tau = val_metrics["kendall_tau"]
 
-                print(f"eta={eta}, depth={max_depth}, rounds={num_round} → nDCG@{args.top_k}={val_ndcg:.4f}, Kendall τ={val_tau:.4f}")
+                print(
+                    f"eta={eta}, depth={max_depth}, rounds={num_round} → nDCG@{args.top_k}={val_ndcg:.4f}, Kendall τ={val_tau:.4f}")
 
                 if val_ndcg > best_score:
                     best_score = val_ndcg
                     best_params = (eta, max_depth, num_round)
 
-    print(f"Best params: eta={best_params[0]}, depth={best_params[1]}, rounds={best_params[2]} → nDCG@{args.top_k}={best_score:.4f}")
+    print(
+        f"Best params: eta={best_params[0]}, depth={best_params[1]}, rounds={best_params[2]} → nDCG@{args.top_k}={best_score:.4f}")
 
     x_train_val = np.vstack([x_train, x_val])
     y_train_val = np.concatenate([y_train, y_val])
@@ -139,8 +164,8 @@ def main():
     print(f"Saved final model to {args.model_out}")
 
     test_metrics = evaluate_model(final_model, x_test, y_test, s_test, groups_test, args.top_k, args.language)
-    print(f"Final Test Results: nDCG@{args.top_k}={test_metrics['ndcg@k']:.4f}, Kendall τ={test_metrics['kendall_tau']:.4f}")
-
+    print(
+        f"Final Test Results: nDCG@{args.top_k}={test_metrics['ndcg@k']:.4f}, Kendall τ={test_metrics['kendall_tau']:.4f}")
 
 
 if __name__ == '__main__':
